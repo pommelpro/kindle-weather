@@ -38,7 +38,7 @@ jobs:
       - name: Prepare site
         run: |
           mkdir site
-          cp out/weather.png out/preview.png site/
+          cp out/weather.png out/preview.png out/light.txt site/
           cat > site/index.html <<'HTML'
           <!doctype html><meta charset="utf-8"><title>Kindle weather</title>
           <body style="margin:0;background:#888"><img src="preview.png" style="max-width:100%;display:block;margin:auto">
