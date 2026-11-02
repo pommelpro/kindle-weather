@@ -30,6 +30,22 @@ fetch() {
     return 1
 }
 
+# Front light: read the percent GitHub publishes next to the picture.
+LIGHT_URL="${IMAGE_URL%/*}/light.txt"
+set_light() {
+    url="$LIGHT_URL?t=$(date +%s)"
+    pct="$(curl -fsSL --max-time 30 "$url" 2>/dev/null || curl -fsSLk --max-time 30 "$url" 2>/dev/null)"
+    pct="$(echo "$pct" | tr -dc 0-9)"
+    [ -n "$pct" ] || return 1
+    [ "$pct" -gt 100 ] && pct=100
+    # Kindle light levels run 0-24
+    lipc-set-prop com.lab126.powerd flIntensity $((pct * 24 / 100)) 2>/dev/null && return 0
+    for d in /sys/class/backlight/*; do
+        max="$(cat "$d/max_brightness" 2>/dev/null)" || continue
+        echo $((pct * max / 100)) > "$d/brightness"
+    done
+}
+
 show() {  # $1 = "full" for a flashing refresh
     [ -s "$IMG" ] || return 1
     if [ "$1" = "full" ]; then

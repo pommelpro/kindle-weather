@@ -5,6 +5,7 @@ log "test run"
 if wifi_up && fetch; then
     sleep 3        # let KUAL's menu close first
     show full
+    set_light
 else
     eips 2 2 "Weather: could not download. See extensions/weather/weather.log"
 fi
