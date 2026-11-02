@@ -1,0 +1,60 @@
+name: Render weather
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # GitHub may run this a few minutes late; that's normal
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Draw the weather image
+        run: |
+          pip install --quiet pillow
+          python render.py
+
+      - name: Prepare site
+        run: |
+          mkdir site
+          cp out/weather.png out/preview.png site/
+          cat > site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>Kindle weather</title>
+          <body style="margin:0;background:#888"><img src="preview.png" style="max-width:100%;display:block;margin:auto">
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      # GitHub pauses scheduled jobs in repos with no activity for 60 days.
+      # Re-enabling the workflow each run keeps the schedule alive.
+      - name: Keep schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/render.yml/enable" || true
