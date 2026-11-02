@@ -29,6 +29,9 @@ TIMEZONE = "America/Chicago"
 HOURLY_STEP = 2           # hours between columns
 HOURLY_COLS = 6           # number of hourly columns
 DAYS_SHOWN = 8            # today + next 7
+# Front light, in percent. "Dark" = 30 min before sunset until 30 min after sunrise.
+LIGHT_DAY = 0
+LIGHT_NIGHT = 25
 # Which way to turn the landscape picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
 #   -90 = Kindle's bottom edge on the LEFT
@@ -361,11 +364,27 @@ def render(data):
     return img
 
 
+def light_level(data):
+    """Front-light percent for right now, based on today's sunrise/sunset."""
+    tz = ZoneInfo(TIMEZONE)
+    now = datetime.now(tz)
+    today = now.strftime("%Y-%m-%d")
+    d = data["daily"]
+    i = d["time"].index(today) if today in d["time"] else 0
+    sunrise = datetime.fromisoformat(d["sunrise"][i]).replace(tzinfo=tz)
+    sunset = datetime.fromisoformat(d["sunset"][i]).replace(tzinfo=tz)
+    pad = timedelta(minutes=30)
+    dark = now < sunrise + pad or now > sunset - pad
+    return LIGHT_NIGHT if dark else LIGHT_DAY
+
+
 def main():
     data = sample() if "--sample" in sys.argv else fetch()
     img = render(data)
     out = os.path.join(HERE, "out")
     os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "light.txt"), "w") as f:
+        f.write(f"{light_level(data)}\n")
     img.save(os.path.join(out, "preview.png"))
     img.rotate(ROTATE, expand=True).save(os.path.join(out, "weather.png"), optimize=True)
     print("wrote", os.path.join(out, "weather.png"))
