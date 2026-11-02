@@ -26,7 +26,8 @@ LOCATION_NAME = "Chicago · 60618"
 LATITUDE = 41.9466
 LONGITUDE = -87.7045
 TIMEZONE = "America/Chicago"
-HOURS_SHOWN = 12          # hourly strip length
+HOURLY_STEP = 2           # hours between columns
+HOURLY_COLS = 6           # number of hourly columns
 DAYS_SHOWN = 8            # today + next 7
 # Which way to turn the landscape picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
@@ -47,15 +48,21 @@ def font(name, size):
 
 F = {
     "huge": lambda: font("InterDisplay-SemiBold.otf", 250),
-    "cond": lambda: font("InterDisplay-SemiBold.otf", 50),
+    "cond": lambda: font("InterDisplay-SemiBold.otf", 56),
     "head": lambda: font("Inter-SemiBold.otf", 32),
-    "body": lambda: font("Inter-Medium.otf", 32),
-    "bodyb": lambda: font("Inter-Bold.otf", 32),
+    "body": lambda: font("Inter-Medium.otf", 36),
+    "bodyb": lambda: font("Inter-Bold.otf", 36),
     "small": lambda: font("Inter-Medium.otf", 26),
     "smallb": lambda: font("Inter-Bold.otf", 26),
-    "day": lambda: font("Inter-Bold.otf", 34),
-    "hi": lambda: font("Inter-Bold.otf", 38),
-    "lo": lambda: font("Inter-Medium.otf", 34),
+    "day": lambda: font("Inter-Bold.otf", 44),
+    "hi": lambda: font("InterDisplay-SemiBold.otf", 60),
+    "lo": lambda: font("InterDisplay-Medium.otf", 48),
+    "hour": lambda: font("Inter-SemiBold.otf", 34),
+    "htemp": lambda: font("InterDisplay-SemiBold.otf", 64),
+    "hrain": lambda: font("Inter-Medium.otf", 34),
+    "hrainb": lambda: font("Inter-Bold.otf", 34),
+    "drain": lambda: font("Inter-Medium.otf", 34),
+    "drainb": lambda: font("Inter-Bold.otf", 34),
 }
 F = {k: v() for k, v in F.items()}
 
@@ -161,7 +168,7 @@ def kind(code):
 
 def hour_label(dt):
     h = dt.hour % 12 or 12
-    return f"{h}{'AM' if dt.hour < 12 else 'PM'}"
+    return f"{h} {'AM' if dt.hour < 12 else 'PM'}"
 
 
 # ---------------------------------------------------------------- drawing helpers
@@ -264,6 +271,17 @@ def draw_drop(c, cx, cy, size, fill=DARK):
            fill=fill)
 
 
+def rain_label(c, x, y, p, f, fb, drop):
+    """Drop icon + percent, centred on x. Bold and dark once rain is likely."""
+    likely = p >= 30
+    s = f"{p}%"
+    fnt = fb if p >= 50 else f
+    w = drop * 0.7 + 8 + c.width(s, fnt)
+    x0 = x - w / 2
+    draw_drop(c, x0 + drop * 0.35, y, drop, fill=DARK if likely else LIGHT)
+    c.text((x0 + drop * 0.7 + 8, y), s, fnt, fill=BLACK if likely else MID, anchor="lm")
+
+
 # ---------------------------------------------------------------- layout
 def render(data):
     tz = ZoneInfo(TIMEZONE)
@@ -287,7 +305,7 @@ def render(data):
     c.text((M + 270, 240), temp, "huge", anchor="lm")
     tx = M + 270 + c.width(temp, "huge") + 50
     tx = max(tx, 760)
-    c.text((tx, 140), describe(cur["weather_code"]), "cond", anchor="lm")
+    c.text((tx, 132), describe(cur["weather_code"]), "cond", anchor="lm")
     hi, lo = round(daily["temperature_2m_max"][0]), round(daily["temperature_2m_min"][0])
     rows = [
         ("Feels like", f"{round(cur['apparent_temperature'])}°"),
@@ -298,50 +316,27 @@ def render(data):
         ("Humidity", f"{round(cur['relative_humidity_2m'])}%"),
     ]
     for i, (k, v) in enumerate(rows):
-        y = 200 + i * 44
+        y = 196 + i * 46
         c.text((tx, y), k, "body", fill=MID, anchor="lm")
-        c.text((tx + 190, y), v, "bodyb", anchor="lm")
+        c.text((tx + 215, y), v, "bodyb", anchor="lm")
     c.line([(M, 410), (W - M, 410)], fill=LIGHT, w=2)
 
-    # --- hourly strip
+    # --- hourly strip: time / temp / rain chance per column
     times = [datetime.fromisoformat(t).replace(tzinfo=tz) for t in hourly["time"]]
-    start = next(i for i, t in enumerate(times) if t > now)
-    idx = list(range(start, start + HOURS_SHOWN))
-    temps = [hourly["temperature_2m"][i] for i in idx]
-    pops = [hourly["precipitation_probability"][i] or 0 for i in idx]
-
-    c.text((M, 440), f"Next {HOURS_SHOWN} hours", "head", anchor="lm")
-    lx = W - M
-    c.rect(lx - 330, 432, lx - 316, 450, fill=DARK, r=2)
-    c.text((lx - 306, 441), "chance of rain", "small", fill=MID, anchor="lm")
-    c.line([(lx - 520, 441), (lx - 480, 441)], fill=BLACK, w=4)
-    c.text((lx - 470, 441), "temp", "small", fill=MID, anchor="lm")
-
-    colw = (W - 2 * M) / HOURS_SHOWN
-    xs = [M + colw * (i + 0.5) for i in range(HOURS_SHOWN)]
-    t_top, t_bot = 510, 610
-    tmin, tmax = min(temps), max(temps)
-    span = max(tmax - tmin, 6)
-    mid = (tmax + tmin) / 2
-    ys = [t_bot - ((t - (mid - span / 2)) / span) * (t_bot - t_top) for t in temps]
-    area = [(xs[0], 650)] + list(zip(xs, ys)) + [(xs[-1], 650)]
-    c.poly(area, fill=PALE)
-    c.line(list(zip(xs, ys)), fill=BLACK, w=4)
-    for x, y, t in zip(xs, ys, temps):
-        c.circle(x, y, 6, fill=BLACK)
-        c.text((x, y - 16), f"{round(t)}°", "smallb", anchor="ms")
-
-    b_top, b_bot = 670, 760
-    c.line([(M, b_bot), (W - M, b_bot)], fill=LIGHT, w=2)
-    for x, p in zip(xs, pops):
-        h = (b_bot - b_top) * p / 100
-        if h >= 2:
-            c.rect(x - 22, b_bot - h, x + 22, b_bot, fill=DARK if p >= 50 else MID, r=4)
-        c.text((x, b_bot + 28), f"{round(p)}%", "smallb" if p >= 50 else "small",
-               fill=BLACK if p >= 30 else MID, anchor="mm")
-    for x, i in zip(xs, idx):
-        c.text((x, b_bot + 66), hour_label(times[i]), "small", fill=DARK, anchor="mm")
-    c.line([(M, 860), (W - M, 860)], fill=LIGHT, w=2)
+    # first column is ~2 hours out (e.g. at 9:05 PM it starts at 11 PM)
+    start = next(i for i, t in enumerate(times) if t > now + timedelta(hours=HOURLY_STEP - 1))
+    idx = [start + HOURLY_STEP * n for n in range(HOURLY_COLS)]
+    colw = (W - 2 * M) / HOURLY_COLS
+    for n, i in enumerate(idx):
+        x = M + colw * (n + 0.5)
+        t = hourly["temperature_2m"][i]
+        p = round(hourly["precipitation_probability"][i] or 0)
+        c.text((x, 450), hour_label(times[i]), "hour", fill=DARK, anchor="mm")
+        c.text((x, 512), f"{round(t)}°", "htemp", anchor="mm")
+        rain_label(c, x, 570, p, "hrain", "hrainb", 26)
+        if n:
+            c.line([(M + colw * n, 432), (M + colw * n, 586)], fill=PALE, w=2)
+    c.line([(M, 606), (W - M, 606)], fill=LIGHT, w=2)
 
     # --- daily row
     dcol = (W - 2 * M) / DAYS_SHOWN
@@ -350,23 +345,15 @@ def render(data):
         date = datetime.fromisoformat(daily["time"][d])
         name = "Today" if d == 0 else date.strftime("%a")
         if d == 0:
-            c.rect(x - dcol / 2 + 6, 872, x + dcol / 2 - 6, 1060, fill=PALE, r=14)
-        c.text((x, 900), name, "day", anchor="mm")
-        draw_icon(c, daily["weather_code"][d], x, 952, 74)
+            c.rect(x - dcol / 2 + 6, 622, x + dcol / 2 - 6, 1058, fill=PALE, r=16)
+        c.text((x, 668), name, "day", anchor="mm")
+        draw_icon(c, daily["weather_code"][d], x, 790, 120)
         hi = round(daily["temperature_2m_max"][d])
         lo = round(daily["temperature_2m_min"][d])
-        his, los = f"{hi}°", f"{lo}°"
-        gap = 12
-        total = c.width(his, "hi") + gap + c.width(los, "lo")
-        x0 = x - total / 2
-        c.text((x0, 1010), his, "hi", anchor="lm")
-        c.text((x0 + c.width(his, "hi") + gap, 1010), los, "lo", fill=MID, anchor="lm")
-        p = round(daily["precipitation_probability_max"][d] or 0)
-        ps = f"{p}%"
-        pw = c.width(ps, "small") + 22
-        draw_drop(c, x - pw / 2 + 7, 1046, 20, fill=DARK if p >= 30 else LIGHT)
-        c.text((x - pw / 2 + 22, 1046), ps, "smallb" if p >= 50 else "small",
-               fill=BLACK if p >= 30 else MID, anchor="lm")
+        c.text((x, 912), f"{hi}°", "hi", anchor="mm")
+        c.text((x, 970), f"{lo}°", "lo", fill=MID, anchor="mm")
+        rain_label(c, x, 1024, round(daily["precipitation_probability_max"][d] or 0),
+                   "drain", "drainb", 26)
 
     img = c.img.resize((W, H), Image.LANCZOS)
     # e-ink shows 16 gray levels; snap to them so nothing dithers oddly
