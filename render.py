@@ -35,7 +35,7 @@ LIGHT_NIGHT = 50
 # Which way to turn the landscape picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
 #   -90 = Kindle's bottom edge on the LEFT
-ROTATE = 90
+ROTATE = -90
 
 W, H = 1448, 1072          # landscape canvas
 S = 2                      # supersampling for smooth edges
