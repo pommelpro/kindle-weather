@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "name": "Weather Display",
+      "priority": 0,
+      "items": [
+        { "name": "Test: show weather once", "priority": 1, "action": "/mnt/us/extensions/weather/bin/once.sh" },
+        { "name": "Start weather display",   "priority": 2, "action": "/mnt/us/extensions/weather/bin/start.sh" }
+      ]
+    }
+  ]
+}
