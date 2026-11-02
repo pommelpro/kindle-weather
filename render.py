@@ -30,7 +30,7 @@ HOURLY_STEP = 2           # hours between columns
 HOURLY_COLS = 6           # number of hourly columns
 DAYS_SHOWN = 8            # today + next 7
 # Front light, in percent. "Dark" = 30 min before sunset until 30 min after sunrise.
-LIGHT_DAY = 25
+LIGHT_DAY = 50
 LIGHT_NIGHT = 50
 # Which way to turn the landscape picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
