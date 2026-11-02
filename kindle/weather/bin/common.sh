@@ -46,6 +46,23 @@ set_light() {
     done
 }
 
+# Ask GitHub to redraw the picture now (needs GITHUB_TOKEN in config.sh).
+request_redraw() {
+    [ -n "$GITHUB_TOKEN" ] || return 1
+    api="https://api.github.com/repos/$GITHUB_REPO/actions/workflows/render.yml/dispatches"
+    for k in "" "-k"; do
+        code="$(curl -sS $k --max-time 30 -o /dev/null -w '%{http_code}' -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "User-Agent: kindle-weather" \
+            -d '{"ref":"main"}' "$api" 2>>"$LOG")"
+        [ "$code" = "204" ] && return 0
+        [ "$code" = "000" ] || break   # got an answer; retrying without TLS checks won't help
+    done
+    log "redraw request failed (HTTP $code)"
+    return 1
+}
+
 show() {  # $1 = "full" for a flashing refresh
     [ -s "$IMG" ] || return 1
     if [ "$1" = "full" ]; then

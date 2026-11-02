@@ -2,8 +2,8 @@ name: Render weather
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # GitHub may run this a few minutes late; that's normal
-  workflow_dispatch:          # lets you run it by hand from the Actions tab
+    - cron: "7 * * * *"      # hourly backup; GitHub runs these late or skips them often
+  workflow_dispatch:          # the Kindle triggers this every 15 minutes (also the Run button)
   push:
     branches: [main]
 
@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   render:
