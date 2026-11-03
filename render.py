@@ -32,7 +32,12 @@ DAYS_SHOWN = 8            # today + next 7
 # Front light, in percent. "Dark" = 30 min before sunset until 30 min after sunrise.
 LIGHT_DAY = 50
 LIGHT_NIGHT = 50
-# Which way to turn the landscape picture for the Kindle:
+# Screen layout: "portrait" (days down the left) or "landscape"
+LAYOUT = "portrait"
+PORTRAIT_DAYS = 5          # today + next 4
+# Portrait: 0 = charging port at the bottom (normal), 180 = port at the top
+PORTRAIT_ROTATE = 0
+# Landscape only - which way to turn the picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
 #   -90 = Kindle's bottom edge on the LEFT
 ROTATE = -90
@@ -287,6 +292,8 @@ def rain_label(c, x, y, p, f, fb, drop):
 
 # ---------------------------------------------------------------- layout
 def render(data):
+    global W, H
+    W, H = 1448, 1072
     tz = ZoneInfo(TIMEZONE)
     now = datetime.now(tz)
     cur = data["current"]
@@ -364,6 +371,92 @@ def render(data):
     return img
 
 
+def render_portrait(data):
+    global W, H
+    W, H = 1072, 1448                     # Canvas reads these
+    tz = ZoneInfo(TIMEZONE)
+    now = datetime.now(tz)
+    cur, hourly, daily = data["current"], data["hourly"], data["daily"]
+    c = Canvas()
+    M = 40
+
+    # header
+    c.text((M, 44), LOCATION_NAME, "head", fill=DARK, anchor="lm")
+    c.text((W - M, 44), now.strftime("%a, %b ") + str(now.day) + "  ·  "
+           + now.strftime("%-I:%M %p"), "head", fill=DARK, anchor="rm")
+    c.line([(M, 82), (W - M, 82)], fill=LIGHT, w=2)
+
+    # left column: 5 days stacked
+    LX0, LX1 = M, 400
+    top, bottom = 96, H - 24
+    rowh = (bottom - top) / PORTRAIT_DAYS
+    cx = (LX0 + LX1) / 2
+    for d in range(PORTRAIT_DAYS):
+        y0 = top + rowh * d
+        if d == 0:
+            c.rect(LX0, y0 + 6, LX1, y0 + rowh - 6, fill=PALE, r=16)
+        elif d:
+            c.line([(LX0 + 20, y0), (LX1 - 20, y0)], fill=PALE, w=2)
+        name = "Today" if d == 0 else datetime.fromisoformat(daily["time"][d]).strftime("%A")
+        c.text((cx, y0 + 44), name, "day", anchor="mm")
+        draw_icon(c, daily["weather_code"][d], cx - 80, y0 + 140, 110)
+        hi = f"{round(daily['temperature_2m_max'][d])}°"
+        lo = f"{round(daily['temperature_2m_min'][d])}°"
+        c.text((cx + 70, y0 + 118), hi, "hi", anchor="mm")
+        c.text((cx + 70, y0 + 176), lo, "lo", fill=MID, anchor="mm")
+        rain_label(c, cx, y0 + rowh - 38, round(daily["precipitation_probability_max"][d] or 0),
+                     "drain", "drainb", 26)
+    c.line([(424, 100), (424, H - 30)], fill=LIGHT, w=2)
+
+    # right column: current conditions
+    RX0, RX1 = 452, W - M
+    rc = (RX0 + RX1) / 2
+    draw_icon(c, cur["weather_code"], RX0 + 80, 214, 150, day=bool(cur.get("is_day", 1)))
+    temp = f"{round(cur['temperature_2m'])}°"
+    tx0 = RX0 + 175
+    size = 230
+    while size > 120:   # shrink so even "100°" or "-10°" fits
+        F["ptemp"] = font("InterDisplay-SemiBold.otf", size)
+        if c.width(temp, "ptemp") <= RX1 - tx0:
+            break
+        size -= 10
+    c.text(((tx0 + RX1) / 2, 214), temp, "ptemp", anchor="mm")
+    c.text((RX0, 372), describe(cur["weather_code"]), "cond", anchor="lm")
+    hi0, lo0 = round(daily["temperature_2m_max"][0]), round(daily["temperature_2m_min"][0])
+    rows = [
+        ("Feels like", f"{round(cur['apparent_temperature'])}°"),
+        ("High / Low", f"{hi0}° / {lo0}°"),
+        ("Rain today", f"{round(daily['precipitation_probability_max'][0] or 0)}%"),
+        ("Wind", f"{round(cur['wind_speed_10m'])} mph"
+                 + (f", gusts {round(cur['wind_gusts_10m'])}"
+                    if cur.get('wind_gusts_10m', 0) - cur['wind_speed_10m'] >= 8 else "")),
+        ("Humidity", f"{round(cur['relative_humidity_2m'])}%"),
+    ]
+    for i, (k, v) in enumerate(rows):
+        y = 440 + i * 50
+        c.text((RX0, y), k, "body", fill=MID, anchor="lm")
+        c.text((RX0 + 220, y), v, "bodyb", anchor="lm")
+    c.line([(RX0, 700), (RX1, 700)], fill=LIGHT, w=2)
+
+    # right column: every 2 hours as rows
+    times = [datetime.fromisoformat(t).replace(tzinfo=tz) for t in hourly["time"]]
+    start = next(i for i, t in enumerate(times) if t > now + timedelta(hours=HOURLY_STEP - 1))
+    idx = [start + HOURLY_STEP * n for n in range(HOURLY_COLS)]
+    htop, hbot = 712, H - 24
+    hh = (hbot - htop) / len(idx)
+    for n, i in enumerate(idx):
+        y = htop + hh * (n + 0.5)
+        if n:
+            c.line([(RX0, htop + hh * n), (RX1, htop + hh * n)], fill=PALE, w=2)
+        c.text((RX0 + 10, y), hour_label(times[i]), "hour", fill=DARK, anchor="lm")
+        c.text((rc + 30, y), f"{round(hourly['temperature_2m'][i])}°", "htemp", anchor="mm")
+        rain_label(c, RX1 - 70, y, round(hourly["precipitation_probability"][i] or 0),
+                     "hrain", "hrainb", 26)
+
+    img = c.img.resize((W, H), Image.LANCZOS)
+    return img.point(lambda v: min(255, round(v / 17) * 17))
+
+
 def light_level(data):
     """Front-light percent for right now, based on today's sunrise/sunset."""
     tz = ZoneInfo(TIMEZONE)
@@ -380,13 +473,14 @@ def light_level(data):
 
 def main():
     data = sample() if "--sample" in sys.argv else fetch()
-    img = render(data)
+    img = render_portrait(data) if LAYOUT == "portrait" else render(data)
     out = os.path.join(HERE, "out")
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "light.txt"), "w") as f:
         f.write(f"{light_level(data)}\n")
     img.save(os.path.join(out, "preview.png"))
-    img.rotate(ROTATE, expand=True).save(os.path.join(out, "weather.png"), optimize=True)
+    turn = PORTRAIT_ROTATE if LAYOUT == "portrait" else ROTATE
+    img.rotate(turn, expand=True).save(os.path.join(out, "weather.png"), optimize=True)
     print("wrote", os.path.join(out, "weather.png"))
 
 
