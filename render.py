@@ -36,7 +36,7 @@ LIGHT_NIGHT = 50
 LAYOUT = "portrait"
 PORTRAIT_DAYS = 5          # today + next 4
 # Portrait: 0 = charging port at the bottom (normal), 180 = port at the top
-PORTRAIT_ROTATE = 0
+PORTRAIT_ROTATE = 180
 # Landscape only - which way to turn the picture for the Kindle:
 #   90  = Kindle's bottom edge (logo side) on the RIGHT when mounted
 #   -90 = Kindle's bottom edge on the LEFT
