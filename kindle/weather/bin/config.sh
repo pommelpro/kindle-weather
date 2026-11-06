@@ -8,5 +8,3 @@ FULL_REFRESH_EVERY=4
 # this repo only). Leave empty to rely on GitHub's hourly backup schedule.
 GITHUB_TOKEN=""
 GITHUB_REPO="pommelpro/kindle-weather"
-# Seconds to wait after asking GitHub before downloading the new picture
-REDRAW_WAIT=150

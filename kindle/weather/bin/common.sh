@@ -30,6 +30,39 @@ fetch() {
     return 1
 }
 
+same_file() {
+    if command -v cmp >/dev/null 2>&1; then cmp -s "$1" "$2"; return; fi
+    [ "$(md5sum < "$1")" = "$(md5sum < "$2")" ]
+}
+
+# After asking for a redraw, keep downloading until the picture actually changes
+# (GitHub Pages can take a few minutes to start serving a new one).
+# Sets WAITED to the seconds spent. Returns 1 only if nothing could be downloaded.
+fetch_new() {
+    WAITED=0
+    got=1
+    sleep 45; WAITED=45
+    while [ "$WAITED" -le 420 ]; do
+        rm -f "$TMP"
+        url="$IMAGE_URL?t=$(date +%s)"
+        if curl -fsSL --max-time 60 -o "$TMP" "$url" 2>>"$LOG" \
+           || curl -fsSLk --max-time 60 -o "$TMP" "$url" 2>>"$LOG"; then
+            if [ -s "$TMP" ]; then
+                got=0
+                if [ ! -s "$IMG" ] || ! same_file "$TMP" "$IMG"; then
+                    mv "$TMP" "$IMG"
+                    log "new picture after ${WAITED}s"
+                    return 0
+                fi
+            fi
+        fi
+        sleep 20; WAITED=$((WAITED + 20))
+    done
+    [ "$got" -eq 0 ] && log "picture still unchanged after ${WAITED}s; keeping the current one"
+    [ "$got" -eq 0 ] || log "download failed"
+    return $got
+}
+
 # Front light: read the percent GitHub publishes next to the picture.
 LIGHT_URL="${IMAGE_URL%/*}/light.txt"
 set_light() {

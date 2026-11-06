@@ -21,17 +21,18 @@ show full
 
 n=0
 while true; do
-    waited=0
+    ok=1
     if wifi_up && request_redraw; then
-        sleep "$REDRAW_WAIT"      # give GitHub time to draw and publish
-        waited=$REDRAW_WAIT
+        fetch_new && ok=0          # waits until GitHub's new picture shows up
+    else
+        WAITED=0
+        wifi_up && fetch && ok=0   # no key or request failed: take what's there
     fi
-    if wifi_up && fetch; then
+    if [ $ok -eq 0 ]; then
         if [ $((n % FULL_REFRESH_EVERY)) -eq 0 ]; then show full; else show; fi
         n=$((n + 1))
         set_light
-        log "updated"
-        rest=$((REFRESH_MINUTES * 60 - waited))
+        rest=$((REFRESH_MINUTES * 60 - WAITED))
         [ "$rest" -gt 60 ] || rest=60
         sleep "$rest"
     else
