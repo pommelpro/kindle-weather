@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,17 +48,24 @@ jobs:
         with:
           path: site
 
-      # If a previous publish got stuck "in progress" on GitHub's side, every later
-      # publish is refused until it's cancelled. Clear any stuck ones first.
+      - id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      # If an earlier publish got stuck "in progress" on GitHub's side, every later
+      # publish is refused. In that case cancel the stuck ones and try once more.
       - name: Clear stuck Pages deployments
+        if: steps.deploy.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           for sha in $(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=30" --jq '.[].sha' | sort -u); do
             gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" >/dev/null 2>&1 && echo "cancelled stuck deployment $sha" || true
           done
+          sleep 10
 
-      - id: deploy
+      - id: deploy_retry
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       # GitHub pauses scheduled jobs in repos with no activity for 60 days.
