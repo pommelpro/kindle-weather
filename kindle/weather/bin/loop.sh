@@ -22,8 +22,9 @@ show full
 n=0
 while true; do
     ok=1
+    asked="$(date +%s)"
     if wifi_up && request_redraw; then
-        fetch_new && ok=0          # waits until GitHub's new picture shows up
+        fetch_new "$asked" && ok=0 # waits until GitHub's new picture is being served
     else
         WAITED=0
         wifi_up && fetch && ok=0   # no key or request failed: take what's there

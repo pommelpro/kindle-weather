@@ -476,6 +476,10 @@ def main():
     img = render_portrait(data) if LAYOUT == "portrait" else render(data)
     out = os.path.join(HERE, "out")
     os.makedirs(out, exist_ok=True)
+    # when this picture was made (seconds since 1970), so the Kindle can tell
+    # whether the website is serving the picture it just asked for
+    with open(os.path.join(out, "stamp.txt"), "w") as f:
+        f.write(f"{int(datetime.now().timestamp())}\n")
     with open(os.path.join(out, "light.txt"), "w") as f:
         f.write(f"{light_level(data)}\n")
     img.save(os.path.join(out, "preview.png"))

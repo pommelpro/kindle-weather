@@ -35,32 +35,27 @@ same_file() {
     [ "$(md5sum < "$1")" = "$(md5sum < "$2")" ]
 }
 
-# After asking for a redraw, keep downloading until the picture actually changes
-# (GitHub Pages can take a few minutes to start serving a new one).
+# After asking for a redraw at time $1 (seconds since 1970), wait until the website
+# serves a picture made after that moment, then download it. GitHub Pages can take
+# a few minutes to start serving a new picture.
 # Sets WAITED to the seconds spent. Returns 1 only if nothing could be downloaded.
+STAMP_URL="${IMAGE_URL%/*}/stamp.txt"
 fetch_new() {
+    asked="$1"
     WAITED=0
-    got=1
-    sleep 45; WAITED=45
-    while [ "$WAITED" -le 420 ]; do
-        rm -f "$TMP"
-        url="$IMAGE_URL?t=$(date +%s)"
-        if curl -fsSL --max-time 60 -o "$TMP" "$url" 2>>"$LOG" \
-           || curl -fsSLk --max-time 60 -o "$TMP" "$url" 2>>"$LOG"; then
-            if [ -s "$TMP" ]; then
-                got=0
-                if [ ! -s "$IMG" ] || ! same_file "$TMP" "$IMG"; then
-                    mv "$TMP" "$IMG"
-                    log "new picture after ${WAITED}s"
-                    return 0
-                fi
-            fi
+    sleep 30; WAITED=30
+    while [ "$WAITED" -le 660 ]; do
+        url="$STAMP_URL?t=$(date +%s)"
+        made="$(curl -fsSL --max-time 30 "$url" 2>/dev/null || curl -fsSLk --max-time 30 "$url" 2>/dev/null)"
+        made="$(echo "$made" | tr -dc 0-9)"
+        # allow a minute of slack in case the Kindle's clock is a little off
+        if [ -n "$made" ] && [ "$made" -ge $((asked - 60)) ]; then
+            if fetch; then log "new picture after ${WAITED}s"; return 0; fi
         fi
         sleep 20; WAITED=$((WAITED + 20))
     done
-    [ "$got" -eq 0 ] && log "picture still unchanged after ${WAITED}s; keeping the current one"
-    [ "$got" -eq 0 ] || log "download failed"
-    return $got
+    log "new picture not published after ${WAITED}s; showing what's there"
+    fetch
 }
 
 # Front light: read the percent GitHub publishes next to the picture.
