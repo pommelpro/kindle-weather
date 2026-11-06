@@ -59,10 +59,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for sha in $(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=30" --jq '.[].sha' | sort -u); do
-            gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" >/dev/null 2>&1 && echo "cancelled stuck deployment $sha" || true
+          repo="${{ github.repository }}"
+          for sha in $(gh api "repos/$repo/deployments?environment=github-pages&per_page=30" --jq '.[].sha' | sort -u); do
+            [ "$sha" = "$GITHUB_SHA" ] && continue
+            gh api -X POST "repos/$repo/pages/deployments/$sha/cancel" >/dev/null 2>&1 && echo "cancelled stuck deployment $sha" || true
           done
-          sleep 10
+          # The stuck one can be this same commit (every Kindle-triggered run shares it).
+          # Cancel it too, then wait until GitHub confirms before retrying.
+          st="$(gh api "repos/$repo/pages/deployments/$GITHUB_SHA" --jq .status 2>/dev/null || true)"
+          echo "this commit's last publish: ${st:-none}"
+          case "$st" in
+            *progress*|*queued*|*sync*|*updating*)
+              gh api -X POST "repos/$repo/pages/deployments/$GITHUB_SHA/cancel" >/dev/null 2>&1 || true
+              for i in $(seq 1 24); do
+                st="$(gh api "repos/$repo/pages/deployments/$GITHUB_SHA" --jq .status 2>/dev/null || true)"
+                case "$st" in *progress*|*queued*|*sync*|*updating*) sleep 5 ;; *) break ;; esac
+              done
+              echo "after cancel: $st"
+              sleep 15 ;;
+          esac
 
       - id: deploy_retry
         if: steps.deploy.outcome == 'failure'
