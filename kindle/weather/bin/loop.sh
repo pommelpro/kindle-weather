@@ -20,14 +20,22 @@ log "still running; interface jobs now: $(initctl list 2>/dev/null | grep -E 'la
 show full
 
 n=0
+down=0
 while true; do
     ok=1
-    asked="$(date +%s)"
-    if wifi_up && request_redraw; then
-        fetch_new "$asked" && ok=0 # waits until GitHub's new picture is being served
+    WAITED=0
+    if wifi_up; then
+        down=0
+        asked="$(date +%s)"
+        if request_redraw; then
+            fetch_new "$asked" && ok=0 # waits until GitHub's new picture is being served
+        else
+            fetch && ok=0              # no key or request failed: take what's there
+        fi
     else
-        WAITED=0
-        wifi_up && fetch && ok=0   # no key or request failed: take what's there
+        down=$((down + 1))
+        # after ~30 minutes without Wi-Fi, try the heavier rescue once in a while
+        [ $((down % 6)) -eq 0 ] && wifi_rescue
     fi
     if [ $ok -eq 0 ]; then
         if [ $((n % FULL_REFRESH_EVERY)) -eq 0 ]; then show full; else show; fi

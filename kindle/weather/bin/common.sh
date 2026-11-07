@@ -7,15 +7,45 @@ LOG="$DIR/weather.log"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 
-wifi_up() {
-    i=0
-    while [ $i -lt 60 ]; do
-        state="$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null)"
-        [ "$state" = "CONNECTED" ] && return 0
-        [ $i -eq 10 ] && lipc-set-prop com.lab126.wifid enable 1 2>/dev/null
-        sleep 2; i=$((i + 1))
+wifi_state() { lipc-get-prop com.lab126.wifid cmState 2>/dev/null; }
+
+# wait up to $1 seconds for Wi-Fi to report CONNECTED
+wifi_wait() {
+    t=0
+    while [ "$t" -lt "$1" ]; do
+        [ "$(wifi_state)" = "CONNECTED" ] && return 0
+        sleep 3; t=$((t + 3))
     done
     return 1
+}
+
+# Make sure Wi-Fi is connected, escalating through stronger reconnect steps.
+wifi_up() {
+    wifi_wait 30 && return 0
+    log "wifi is '$(wifi_state)'; trying to reconnect"
+    for step in enable radio wpa; do
+        case "$step" in
+            enable) lipc-set-prop com.lab126.wifid enable 1 ;;
+            radio)  lipc-set-prop com.lab126.cmd wirelessEnable 0; sleep 5
+                    lipc-set-prop com.lab126.cmd wirelessEnable 1 ;;
+            wpa)    command -v wpa_cli >/dev/null 2>&1 || continue
+                    wpa_cli -i wlan0 reconnect ;;
+        esac >/dev/null 2>&1
+        if wifi_wait 60; then log "wifi back after '$step'"; return 0; fi
+    done
+    log "wifi still '$(wifi_state)' after reconnect steps"
+    return 1
+}
+
+# Last resort: briefly run the normal Kindle interface, which knows how to
+# reconnect to Wi-Fi, then shut it down again.
+wifi_rescue() {
+    log "wifi down for a while; starting the Kindle interface to reconnect"
+    start lab126_gui >/dev/null 2>&1 || start framework >/dev/null 2>&1
+    if wifi_wait 180; then log "wifi back with the interface running"; fi
+    for job in lab126_gui framework; do stop "$job" >/dev/null 2>&1; done
+    sleep 5
+    show full
 }
 
 fetch() {
