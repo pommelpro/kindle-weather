@@ -32,6 +32,9 @@ DAYS_SHOWN = 8            # today + next 7
 # Front light, in percent. "Dark" = 30 min before sunset until 30 min after sunrise.
 LIGHT_DAY = 50
 LIGHT_NIGHT = 50
+# Light fully off overnight (24-hour clock): from 11 PM until 6 AM
+LIGHT_OFF_FROM = 23
+LIGHT_OFF_UNTIL = 6
 # Screen layout: "portrait" (days down the left) or "landscape"
 LAYOUT = "portrait"
 PORTRAIT_DAYS = 5          # today + next 4
@@ -461,6 +464,8 @@ def light_level(data):
     """Front-light percent for right now, based on today's sunrise/sunset."""
     tz = ZoneInfo(TIMEZONE)
     now = datetime.now(tz)
+    if now.hour >= LIGHT_OFF_FROM or now.hour < LIGHT_OFF_UNTIL:
+        return 0
     today = now.strftime("%Y-%m-%d")
     d = data["daily"]
     i = d["time"].index(today) if today in d["time"] else 0
